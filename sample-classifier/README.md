@@ -30,12 +30,16 @@ We observed poor CatBoost performance when the train and test samples originated
 
 <img src="plots/catboost_roc.png" width="900">
 
-After applying statistical tests, we observed that top significant k-mers (i.e., with the lowest p-value) are located towards the end of CDR3 sequence (left). They also allow for unambiguous decision boundry between Healthy and Convalescent groups (right).
+After applying statistical tests, we observed that top significant k-mers* (i.e., with the lowest p-value) are located towards the end of CDR3 sequence (left), which means they come from the J segment. They also allow for unambiguous decision boundry between Healthy and Convalescent groups (right) in the dataset.
 
 <p float="center">
-  <img src="plots/ssk_location.png" width="45%" />
+  <img src="plots/ssk_location_fixed.png" width="45%" />
   <img src="plots/ssk_pca_Shoukat.png" width="45%" /> 
 </p>
+
+Knowing that, we were able to identify a set of J segments that may distinguish Convalescent from Healthy*.
+
+\* no significant k-mers or J segments were discovered in one of the datasets; poor consistency may be a result of systematic biases between TCR repertoire profiling methods (as discussed in [this study](https://www.nature.com/articles/s41587-020-0656-3)) or because of high individual diversity.
 
 ## Data availability
 Apart from the [dataset](https://www.ebi.ac.uk/ena/browser/view/PRJEB38339) from _Shoukat et al._ article, this project used some yet unpublished samples that are not to be shared at the moment. Generated frequency tables, however, are free for use (files `freq_table.csv` and `freq_table_normalized.csv`).
@@ -64,22 +68,8 @@ Third-party python libraries:
 
 ## References 
 
-
-
-Old samples:
-
-- immunity_paper_data - samples from Somuradova et al
--- PBMC - whole blood from COVID+ donors
--- IFNg CD4 - CD4 T-cells that respond to stimulation by coronavirus epitopes
--- IFNg CD8 - CD4 T-cells that respond to stimulation by coronavirus epitopes
-
-New samples (unpublished, should not be shared!):
-
-- convalescent - new data on COVID+ donors (PBMC)
-- healthy - healthy donors obtained with the same protocol (PBMC)
-- icu - acute COVID+, on intralung ventilation devises (PBMC)
-- icu_lung - same as ICU, but T-cells are taken from lung tissue
-
-The idea is to train a classifier that would tell convalescent from healthy, one can use IFNg+ clonotypes (observed in IFNg more than in PBMC) from all data as features for classifier. Other ideas welcome
-
-Can also add data from [Shoukat et al.](https://www.sciencedirect.com/science/article/pii/S2666379121000033)
+1. Dmitriy A. Bolotin, Stanislav Poslavsky, Igor Mitrophanov, Mikhail Shugay, Ilgar Z. Mamedov, Ekaterina V. Putintseva, and Dmitriy M. Chudakov. "MiXCR: software for comprehensive adaptive immunity profiling." Nature methods 12, no. 5 (2015): 380-381.
+2. Barennes, P., Quiniou, V., Shugay, M. et al. "Benchmarking of T cell receptor repertoire profiling methods reveals large systematic biases." Nat Biotechnol 39, 236–245 (2021). https://doi.org/10.1038/s41587-020-0656-3
+3. Liudmila Prokhorenkova, Gleb Gusev, Aleksandr Vorobev, Anna Veronika Dorogush, Andrey Gulin. "CatBoost: unbiased boosting with categorical features." NeurIPS, 2018
+4. M. Saad Shoukat, Andrew D. Foers, Stephen Woodmansey, Shelley C.Evans, Anna Fowler, Elizabeth J. Soilleux. "Use of machine learning to identify a T cell response to SARS-CoV-2." Cell Reports Medicine, 2021
+ 
