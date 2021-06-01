@@ -1,6 +1,6 @@
 #--------custom functions--------
 # function to plot confusion matrix. taken from https://stackoverflow.com/a/66606295
-conf_matrix <- function(df.true, df.pred, ba, title = "", true.lab ="True Class", pred.lab ="Predicted Class",
+conf_matrix <- function(df.true, df.pred, title = "", true.lab ="True Class", pred.lab ="Predicted Class",
                         high.col = 'red', low.col = 'white') {
   #convert input vector to factors, and ensure they have the same levels
   df.true <- as.factor(df.true)
