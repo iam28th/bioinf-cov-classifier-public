@@ -8,19 +8,28 @@
 
 ## Methods
 
-We used MiXCR[1] to get annnotation and calculate clonotype frequency statistics from raw sequences data[2]. Then V-usage normalization was applied to the generated feature tables and k-mer and VDJ-genes frequencied were calculated for each sample. The frequencies were used as input features for several machine learning models (namely, CatBoost ensemble and hierarchical clustering). We also performed statistical tests for each k-mer frequency and inspected location of the most significant ones. Python graphing libraries (matplotlib, seaborn and Logomaker) were used to visualize our findings.
+We used MiXCR to get annnotation and calculate clonotype frequency statistics from raw sequences data. Then V-usage normalization was applied to the generated feature tables and k-mer and VDJ-genes frequencied were calculated for each sample. The frequencies were used as input features for several machine learning models (namely, CatBoost ensemble and hierarchical clustering). We also performed statistical tests for each k-mer frequency and inspected location of the most significant ones. Python graphing libraries (matplotlib, seaborn and Logomaker) were used to visualize our findings.
+
+[plots/Flowchart.png]
+
+## Results
+
+
+## Data availability
+Apart from the [dataset](https://www.ebi.ac.uk/ena/browser/view/PRJEB38339) from _Shoukat et al._ article, this project used some yet unpublished samples that are not to be shared at the moment. Generated frequency tables, however, are free for use (files `freq_table.csv` and `freq_table_normalized.csv`).
 
 ## System requirements 
 
 The work was performed using HP Pavilion Notebook with the following parameters:
-1. OS - Ubuntu 20.04.1 LTS x86_64 
-2. CPU - Intel i5-8300H (8) @ 4.000GHz
-3. RAM - 7809MiB
+* OS - Ubuntu 20.04.1 LTS x86_64 
+* CPU - Intel i5-8300H (8) @ 4.000GHz
+* RAM - 7809MiB
 
 The following software was used during the course of the project:
 * MiXCR v3.0.13
 * Python 3.8.5
 * Jupyter notebook 6.1.4
+
 Third-party python libraries:
 * numpy 1.19.2
 * pandas 1.1.3
@@ -30,6 +39,10 @@ Third-party python libraries:
 * scikitplot 0.3.7
 * logomaker 0.8 
 * catboost 0.24.4
+
+## References 
+
+
 
 Old samples:
 
