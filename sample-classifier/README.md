@@ -12,9 +12,14 @@ We used MiXCR to get annnotation and calculate clonotype frequency statistics fr
 
 <img src="plots/Flowchart.png" width="300">
 
-![flowchart](plots/Flowchart.png)
-
 ## Results
+
+V-usage normzliation noticeably reduces bias between datasets:
+
+<p float="left">
+  <img src="plots/kmer_jointplot_unnormalized.jpg" width="50%" />
+  <img src="plots/V-usage normalization 3-mers only.png" width="50%" /> 
+</p>
 
 
 ## Data availability
