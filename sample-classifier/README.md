@@ -14,13 +14,28 @@ We used MiXCR to get annnotation and calculate clonotype frequency statistics fr
 
 ## Results
 
-V-usage normzliation noticeably reduces bias between datasets:
+V-usage normzliation noticeably reduces bias between datasets, as can be seen from PCA plots and hierarchical clustering results (unnormalized samples are on the left):
 
-<p float="left">
-  <img src="plots/kmer_jointplot_unnormalized.jpg" width="50%" />
-  <img src="plots/V-usage normalization 3-mers only.png" width="50%" /> 
+<p float="center">
+  <img src="plots/Unnormalized 3-mers only.png " width="45%" />
+  <img src="plots/V-usage normalization 3-mers only.png" width="45%" /> 
 </p>
 
+<p float="center">
+  <img src="plots/cluster_by_origin_only_kmers_not_normalized.png" width="45%" />
+  <img src="plots/cluster_by_origin_only_kmers.png" width="45%" /> 
+</p>
+
+We observed poor CatBoost performance when the train and test samples originated from different datasets:
+
+<img src="plots/catboost_roc.png" width="900">
+
+After applying statistical tests, we observed that top significant k-mers (i.e., with the lowest p-value) are located towards the end of CDR3 sequence (left). They also allow for unambiguous decision boundry between Healthy and Convalescent groups (right).
+
+<p float="center">
+  <img src="plots/ssk_location.png" width="45%" />
+  <img src="plots/ssk_pca_Shoukat.png" width="45%" /> 
+</p>
 
 ## Data availability
 Apart from the [dataset](https://www.ebi.ac.uk/ena/browser/view/PRJEB38339) from _Shoukat et al._ article, this project used some yet unpublished samples that are not to be shared at the moment. Generated frequency tables, however, are free for use (files `freq_table.csv` and `freq_table_normalized.csv`).
