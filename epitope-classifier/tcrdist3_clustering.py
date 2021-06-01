@@ -1,7 +1,4 @@
 import pandas as pd
-from os.path import join as opj
-from tcrdist.mappers import vdjdb_to_tcrdist2, vdjdb_to_tcrdist2_mapping_TRA, vdjdb_to_tcrdist2_mapping_TRB
-import json
 from tcrdist.repertoire import TCRrep
 from tcrdist.adpt_funcs import get_basic_centroids
 import argparse
