@@ -46,12 +46,3 @@ write.table(gliph2_input, paste0(path, 'gliph2/gliph2_input.tsv'), sep = '\t',
             quote = F, row.names = F, col.names = T)
 rm(gliph2_input)
 # run gliph2: via web interface @ http://50.255.35.37:8080
-
-#--------GLIPH--------
-# gliph_input <- vdjdb %>% select(gene, cdr3, v.segm, j.segm, antigen.epitope) %>% 
-#   rename(CDR3b = cdr3, TRBV = v.segm, TRBJ = j.segm, epitope = antigen.epitope)
-# 
-# write.table(gliph_input[, c(2:4)], file = paste0(path, 'gliph_input.txt'), 
-#             quote = F, row.names = F, sep = '\t')
-
-# run gliph: Software/gliph/bin/gliph-group-discovery.pl --tcr bioinf-cov-classifier/epitope-classifier/TCRB_gene.txt
