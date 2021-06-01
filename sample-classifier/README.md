@@ -10,8 +10,9 @@
 
 We used MiXCR to get annnotation and calculate clonotype frequency statistics from raw sequences data. Then V-usage normalization was applied to the generated feature tables and k-mer and VDJ-genes frequencied were calculated for each sample. The frequencies were used as input features for several machine learning models (namely, CatBoost ensemble and hierarchical clustering). We also performed statistical tests for each k-mer frequency and inspected location of the most significant ones. Python graphing libraries (matplotlib, seaborn and Logomaker) were used to visualize our findings.
 
-<img src="plots/Flowchart.png" width="48">
-![flowchart](plots/Flowchart.png){:height="50%" width="50%"}
+<img src="plots/Flowchart.png" width="300">
+
+![flowchart](plots/Flowchart.png)
 
 ## Results
 
