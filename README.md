@@ -10,6 +10,6 @@ were also found. This project aims to identify a set of TCRs that can serve as C
 biomarkers, suggest machine learning methods that can associate individual TCR
 repertoires with COVID-19 status and compare existing tools for TCR clustering.
 
-The repository contains following folders:
+The repository contains the following folders:
 - ``sample-classifier``  - sample classification based on T-cell repertoire 
 - ``epitope-classifier`` - performance evaluation of TCR clustering methods
