@@ -1,0 +1,352 @@
+---
+title: 'Identification and analysis of SARS-CoV-2-specific T-cell receptors\\: Epitope
+  classification'
+author: "Andrey Sobolev, Artyom Ershov"
+date: "6/10/2021"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+This R Markdown document briefly describes a workflow of comparing algorithms for TCR classification (tcrdist3 and GLIPH2) to tell coronavirus epitopes from other virus-specific epitopes.
+
+# 0. Custom functions definition 
+
+Here, we define a custom function to plot a confusion matrix that will be used later in the downstream analysis. Arguments: `df.true` - dataframe with true values, `df.pred` - dataframe with predicted values, `title` - main title of the resulting plot, `true.lab` - label of the true class, `pred.lab` - label of the predicted class, `high.col` and `low.col` define color scale for the plot.
+
+```{r 00_custom_functions}
+#--------custom functions--------
+# function to plot confusion matrix. taken from https://stackoverflow.com/a/66606295
+conf_matrix <- function(df.true, df.pred, ba, title = "", true.lab ="True Class", pred.lab ="Predicted Class",
+                        high.col = 'red', low.col = 'white') {
+  #convert input vector to factors, and ensure they have the same levels
+  df.true <- as.factor(df.true)
+  df.pred <- factor(df.pred, levels = levels(df.true))
+  
+  #generate confusion matrix, and confusion matrix as a pecentage of each true class (to be used for color) 
+  df.cm <- table(True = df.true, Pred = df.pred)
+  df.cm.col <- df.cm / rowSums(df.cm)
+  
+  #convert confusion matrices to tables, and binding them together
+  df.table <- reshape2::melt(df.cm)
+  df.table.col <- reshape2::melt(df.cm.col)
+  df.table <- left_join(df.table, df.table.col, by =c("True", "Pred"))
+  
+  #calculate accuracy and class accuracy
+  acc.vector <- c(diag(df.cm)) / c(rowSums(df.cm))
+  class.acc <- data.frame(Pred = "Class Acc.", True = names(acc.vector), value = acc.vector)
+  acc <- sum(diag(df.cm)) / sum(df.cm)
+  
+  #plot
+  ggplot() +
+    geom_tile(aes(x=Pred, y=True, fill=value.y),
+              data=df.table, size=0.2, color=grey(0.5)) +
+    geom_tile(aes(x=Pred, y=True),
+              data=df.table[df.table$True==df.table$Pred, ], size=1, color="black", fill = 'transparent') +
+    scale_x_discrete(position = "top",  limits = c(levels(df.table$Pred), "Class Acc.")) +
+    scale_y_discrete(limits = rev(unique(levels(df.table$Pred)))) +
+    labs(x=pred.lab, y=true.lab, fill=NULL,
+         title= paste0(title, "\nAccuracy ", round(100*acc, 1), "%\n")) +
+    geom_text(aes(x=Pred, y=True, label=value.x),
+              data=df.table, size=4, colour="black") +
+    geom_text(data = class.acc, aes(Pred, True, label = paste0(round(100*value), "%"))) +
+    scale_fill_gradient(low=low.col, high=high.col, labels = scales::percent,
+                        limits = c(0,1), breaks = c(0,0.5,1)) +
+    guides(size=F) +
+    theme_bw() +
+    theme(panel.border = element_blank(), legend.position = "bottom",
+          axis.text = element_text(color='black'), axis.ticks = element_blank(),
+          panel.grid = element_blank(), axis.text.x.top = element_text(angle = 30, vjust = 0, hjust = 0)) +
+    coord_fixed()
+  
+}
+```
+
+Then, let's attach prerequisite packages.
+
+```{r packages, message=F}
+pckgs <- c('data.table', 'dplyr', 'tidyr', 'ggplot2', 'patchwork', 'pROC', 'stringr')
+for(i in pckgs){
+  if(!require(i, character.only = T)){
+    install.packages(i, dependencies = T)
+    library(i)
+  }
+}
+```
+
+
+# 1. Data preprocessing
+
+For the analysis, VDJdb was used. It is stored in the repository under the name `vdjdb.slim.txt`. To use it in the analysis, one must specify a valid path to the VDJdb.
+
+```{r}
+path <- './'
+vdjdb <- fread(paste0(path, 'vdjdb.slim.txt'))
+str(vdjdb)
+```
+
+Firstly, we are only interested in queries whose reference is not from 10X Genomics as 10X datasets are too large. We are also interested in beta chains only and in MHC allele A02. Epitopes of SARS-CoV-2 are the entries where the `antigen.epitope` column starts with YLQ. As a control set, we used epitopes starting with GLC (Influenza A-specific epitopes), GIL (Epstein-Barr virus) and NLV (Citomegalovirus). For further analysis, column `clonotype` (in fact, dataset indices) is required so we add it here as well.
+
+```{r}
+vdjdb <- vdjdb[-grep('10x', vdjdb$reference.id),] %>% 
+  filter(gene == 'TRB', species == 'HomoSapiens') %>% filter(
+         (str_starts(antigen.epitope, 'YLQ') & str_starts(mhc.a, 'HLA-A\\*02'))
+         | (str_starts(antigen.epitope, 'GLC') & str_starts(mhc.a, 'HLA-A\\*02'))
+         | (str_starts(antigen.epitope, 'GIL') & str_starts(mhc.a, 'HLA-A\\*02'))
+         | (str_starts(antigen.epitope, 'NLV') & str_starts(mhc.a, 'HLA-A\\*02')))
+vdjdb$clonotype <- seq(1:nrow(vdjdb))
+```
+
+After initial filtering of the database, it is necessary to format the data properly for tcrdist3 and GLIPH2. 
+
+## 1.1. tcrdist3 formatting
+
+Briefly, the `count` column is defined, then some columns are renamed and necessary columns are selected. See tcrdist3 documentation on https://tcrdist3.readthedocs.io/ for detailed explanations. After writing the results into a file, we rename the created variable so as not to litter the workspace.
+
+```{r}
+tcrdist3_input <- vdjdb %>% 
+  mutate(cohort = ifelse(antigen.species == 'SARS-CoV-2', 'CoV', 'non-CoV'),
+         count = 1) %>% rename(epitope = antigen.epitope,
+                               v_b_gene = v.segm,
+                               j_b_gene = j.segm,
+                               cdr3_b_aa = cdr3,
+                               subject = clonotype) %>% 
+  select(subject, epitope, count, v_b_gene, j_b_gene, cdr3_b_aa)
+write.table(tcrdist3_input, paste0(path, 'tcrdist3/tcrdist3_input.tsv'), sep = '\t', 
+            quote = F, row.names = F, col.names = T)
+rm(tcrdist3_input)
+```
+
+
+## 1.2. GLIPH2 formatting
+
+The same is done for GLIPH2. For details, please visit GLIPH2 documentation at http://50.255.35.37:8080.
+
+```{r}
+gliph2_input <- vdjdb %>% 
+  mutate(cohort = ifelse(antigen.species == 'SARS-CoV-2', 'CoV', 'non-CoV'),
+         count = 1) %>% rename(CDR3b = cdr3,
+                               TRBV = v.segm,
+                               TRBJ = j.segm,
+         ) %>% unite('subject:condition', clonotype:cohort, sep=':') %>%
+  mutate(count = 1, CDR3a = NA) %>% 
+  select(CDR3b, TRBV, TRBJ, CDR3a, 'subject:condition', count) 
+
+write.table(gliph2_input, paste0(path, 'gliph2/gliph2_input.tsv'), sep = '\t',
+            quote = F, row.names = F, col.names = T)
+rm(gliph2_input)
+```
+
+## Launching the algorithms
+
+tcrdist3 was launched using the Python script `tcrdist3_clustering.py`. See its description in README (**Methods**, **Description and Usage** sections) for details.
+GLIPH2 was launched using the web interface at  http://50.255.35.37:8080. See README (**Methods**, **Description and Usage** sections) for detailed explanation of the parameters.
+
+Resulting files are stored in the repository in corresponding folders. GLIPH2 results are stored under the name `gliph2_output_raw.csv`, tcrdist3 results are under the name `centroids_df.csv`.
+
+# 2. GLIPH2 analysis
+
+Load the results:
+
+```{r}
+gliph2 <- fread(paste0(path, 'gliph2/gliph2_output_raw.csv'), fill = T)
+```
+
+Now, we tidy up the results for convenience and filter out the clusters with <10 members.
+
+```{r, warning=F}
+gliph2 <- gliph2 %>% separate(Sample, c('clonotype', NA), ':') %>%  # extract clonotypes' IDs
+  mutate_at('clonotype', as.numeric) %>%   # convert to numeric
+  group_by(index) %>% rename(cluster = index) %>%  # group by cluster
+  mutate(ulTcRb = as.factor(ulTcRb)) %>% 
+  select(-TcRa) %>% filter(!is.na(cluster)) %>% rename(cdr3 = TcRb) %>% 
+  filter(number_unique_cdr3 >= 10)
+```
+
+Next, we merge it with the initial database to retrieve information on epitopes corresponding to these TCRs.
+
+```{r}
+preds <- merge(gliph2, vdjdb, by = c('clonotype', 'cdr3'), all.y = T) %>% # set all.y to T to complete
+  select(clonotype, cdr3, antigen.species, antigen.epitope, cluster) %>%  # choose only necessary columns
+  rename(species = antigen.species, epitope = antigen.epitope) %>% 
+  mutate_at('species', as.factor)
+preds$cluster[which(is.na(preds$cluster))] <- 0  # set cluster of unclassified samples to 0
+```
+
+To estimate the probabilities of assigning each epitope to its cluster, we term the share of each epitope in the corresponding cluster as "epitope weight" and attach these weights to the dataframe with predictions. We then check the correctness of the predictions by adding `correct_epitope` column.
+
+```{r, message=F}
+weights <- preds %>% group_by(cluster, epitope) %>% count(epitope) %>% 
+  group_by(cluster) %>% 
+  summarize(cluster = cluster, epitope = epitope, epitope_weight = n / sum(n),
+            predicted_epitope = epitope[which.max(epitope_weight)])
+
+# attach to the initial dataframe
+preds <- merge(weights, preds, by = c('cluster', 'epitope'))
+preds$correct_epitope <- ifelse(preds$epitope == preds$predicted_epitope, TRUE, FALSE)
+```
+
+IMPORTANT: After that, we remove clonotypes that were assigned to multiple clusters. To avoid it, comment the line with ` %>% filter(n == 1)`. Line with " %>% filter(n == 1)" can be either commented or uncommented depending on whether you want to remove clonotypes that were assigned to multiple clusters (yes, GLIPH2 clusters TCRs this way).
+
+After that, columns for binary classification estimation are prepared.
+
+```{r}
+preds <-merge(preds, count(preds, clonotype)) %>% filter(n == 1)
+
+preds$correct_epitope[which(preds$cluster == 0)] <- FALSE
+preds$predicted_epitope[which(preds$cluster == 0)] <- 'None'
+preds <- preds %>%
+  mutate_at(c('epitope', 'predicted_epitope'), as.factor) %>% 
+  mutate(ylq_real = ifelse(str_starts(epitope, 'YLQ'), 'YLQ', 'Not_YLQ'),
+         ylq_pred = ifelse(str_starts(predicted_epitope, 'YLQ'), 'YLQ', 'Not_YLQ')) %>% 
+  mutate_at(c('ylq_real', 'ylq_pred'), as.factor) %>% 
+  mutate(ylq_correct = ifelse(ylq_real == ylq_pred, TRUE, FALSE))
+```
+
+We use pROC library for the classification.
+
+## 2.1. Multi-class classification: ROC, PRC
+
+```{r, message=F, warning=F}
+gliph2_multiclass_roc <- multiclass.roc(preds$epitope, preds$epitope_weight)
+print(auc(gliph2_multiclass_roc))
+rs_gliph2 <- gliph2_multiclass_roc[['rocs']][c(3, 5, 6)]  # list of roc curves
+pr_curves_gliph2 <- lapply(c(1:3), function (i) 
+  coords(rs_gliph2[[i]], 'all', ret = c('recall', 'precision', 'threshold'), transpose = FALSE))  # list of data for PRC
+
+roc_gliph2_multiclass_plot <- ggroc(rs_gliph2) + theme_bw() + scale_color_manual(name="YLQ vs",
+                                                                                 labels=c("GIL","GLC","NLP"),
+                                                                                 values=c("red","green","blue")) + 
+  ggtitle('GLIPH2 ROC Curves: Multi-class classification')
+
+pr_curves_gliph2[[1]]$response <- 'GIL'
+pr_curves_gliph2[[2]]$response <- 'GLC'
+pr_curves_gliph2[[3]]$response <- 'NLP'
+
+pr_gliph2 <- rbind(pr_curves_gliph2[[1]], pr_curves_gliph2[[2]], pr_curves_gliph2[[3]])
+pr_gliph2_multiclass_plot <- ggplot(pr_gliph2, aes(recall, precision, color = response)) + geom_path(aes(recall, precision)) + coord_equal() + 
+  theme_bw() + scale_color_manual(name='YLQ vs',
+                                  values=c('red', 'green', 'blue')) + 
+  ggtitle('GLIPH2 PR Curves: Multi-class classification')
+roc_gliph2_multiclass_plot
+pr_gliph2_multiclass_plot
+```
+
+## 2.2. Binary classification: ROC, PRC
+
+```{r, message=F, warning=F}
+gliph2_binary_roc <- roc(preds$ylq_real, preds$epitope_weight)
+print(auc(gliph2_binary_roc))
+binary_roc_gliph2_plot <- ggroc(gliph2_binary_roc) + theme_bw() + ggtitle(paste0('GLIPH2 ROC Curve(AUC = ', round(auc(gliph2_binary_roc),2), '): Binary classification'))
+pr1 <- coords(gliph2_binary_roc, 'all', ret = c('recall', 'precision', 'threshold'), transpose = F)
+binary_prc_gliph2_plot <- ggplot(pr1, aes(recall, precision)) + geom_path(aes(recall, precision)) + coord_equal() + 
+  theme_bw() + ggtitle('GLIPH2 PR Curve: Binary classification')
+binary_roc_gliph2_plot
+binary_prc_gliph2_plot
+```
+
+# 2.3. Confusion matrices
+
+Here, we will use our custom function created at the beginning.
+
+```{r}
+gliph2_binary_cm <- conf_matrix(preds$ylq_real, 
+                                preds$ylq_pred, 
+                                title = 'GLIPH2 Confusion matrix: Binary classification\n')
+gliph2_multiclass_cm <- conf_matrix(preds$epitope, 
+                                    preds$predicted_epitope, 
+                                    title='GLIPH2: Confusion matrix: Multi-class classification\n')
+
+gliph2_binary_cm
+gliph2_multiclass_cm
+```
+
+# 3. tcrdist3 analysis
+
+Same ideas are used here except for the slightly different data preprocessing and filtration. That is why this section will be barely described. For details, please see section 2.
+
+Load data:
+
+```{r}
+tcrdist3 <- fread(paste0(path, 'tcrdist3/centroids_df.csv'))
+```
+
+Tidy up and summarize the results:
+
+```{r, message=F}
+tcrdist3$neighbors <- gsub('\\[|\\]', '', tcrdist3$neighbors)
+summ <- tcrdist3 %>% separate_rows(neighbors, sep = ',') %>% 
+  group_by(epitope) %>% summarize(cluster = cluster_id,
+                                  clonotype = as.numeric(neighbors))
+```
+
+Merge with the initial database and assign columns for classification estimation:
+
+```{r, message=F}
+res <- merge(summ, vdjdb, by = 'clonotype') %>% 
+  select(clonotype, cluster, epitope, antigen.epitope, antigen.species) %>% 
+  rename(predicted_epitope = epitope, epitope = antigen.epitope, Species = antigen.species) %>% 
+  group_by(cluster, epitope) %>% mutate(num = n()) %>% 
+  group_by(cluster) %>% 
+  summarize(cluster = cluster, epitope = epitope, epitope_weight = num / sum(num),
+            predicted_epitope = predicted_epitope, clonotype = clonotype,
+            Species = Species) %>% arrange(cluster) %>%
+  mutate(predicted_epitope = epitope[which.max(epitope_weight)]) %>% 
+  mutate(ylq_real = ifelse(str_starts(epitope, 'YLQ'), 'YLQ', 'Not_YLQ'),
+         ylq_pred = ifelse(str_starts(predicted_epitope, 'YLQ'), 'YLQ', 'Not_YLQ')) %>% 
+  mutate_at(c('ylq_real', 'ylq_pred', 'epitope', 'predicted_epitope'), as.factor) %>% 
+  mutate(ylq_correct = ifelse(ylq_real == ylq_pred, TRUE, FALSE))
+```
+
+# 3.1. Multi-class classification: ROC, PRC
+
+```{r, message=F, warning=F}
+tcrdist3_multiclass_roc <- multiclass.roc(res$epitope, res$epitope_weight)
+auc(tcrdist3_multiclass_roc)
+rs_tcrdist <- tcrdist3_multiclass_roc[['rocs']][c(3, 5, 6)]  # list of roc curves
+pr_curves_tcrdist <- lapply(c(1:3), function (i) 
+  coords(rs_tcrdist[[i]], 'all', ret = c('recall', 'precision', 'threshold'), transpose = FALSE))  # list of data for PRC
+
+roc_tcrdist3_multiclass_plot <- ggroc(rs_tcrdist) + theme_bw() + scale_color_manual(name="YLQ vs",
+                                                                                    labels=c("GIL","GLC","NLP"),
+                                                                                    values=c("red","green","blue")) + 
+  ggtitle('tcrdist3 ROC Curves: Multi-class classification')
+
+pr_curves_tcrdist[[1]]$response <- 'GIL'
+pr_curves_tcrdist[[2]]$response <- 'GLC'
+pr_curves_tcrdist[[3]]$response <- 'NLP'
+
+pr_tcrdist3 <- rbind(pr_curves_tcrdist[[1]], pr_curves_tcrdist[[2]], pr_curves_tcrdist[[3]])
+pr_tcrdist3_multiclass_plot <- ggplot(pr_tcrdist3, aes(recall, precision, color = response)) + geom_path(aes(recall, precision)) + coord_equal() + 
+  theme_bw() + scale_color_manual(name='YLQ vs',
+                                  values=c('red', 'green', 'blue')) + 
+  ggtitle('tcrdist3 PR Curves: Multi-class classification')
+roc_tcrdist3_multiclass_plot
+pr_tcrdist3_multiclass_plot
+```
+
+# 3.2. Binary classification: ROC, PRC
+
+```{r, message=F, warning=F}
+tcrdist3_binary_roc <- roc(res$ylq_real, res$epitope_weight)
+auc(tcrdist3_binary_roc)
+roc_tcrdist3_binary_plot <- ggroc(tcrdist3_binary_roc) + theme_bw() + ggtitle(paste0('tcrdist3 ROC Curve(AUC = ', round(auc(tcrdist3_binary_roc),2), '): Binary classification'))
+pr <- coords(tcrdist3_binary_roc, 'all', ret = c('recall', 'precision', 'threshold'), transpose = F)
+prc_tcrdist3_binary_plot <- ggplot(pr, aes(recall, precision)) + geom_path(aes(recall, precision)) + coord_equal() + 
+  theme_bw() + ggtitle('tcrdist3 PR Curve: Binary classification')
+roc_tcrdist3_binary_plot
+prc_tcrdist3_binary_plot
+```
+
+# 3.3. Confusion matrices
+
+```{r}
+tcrdist3_binary_cm <- conf_matrix(res$ylq_real, 
+                                  res$ylq_pred, 
+                                  title = 'Tcrdist3: Confusion matrix. Binary classification\n')
+tcrdist3_multiclass_cm <- conf_matrix(res$epitope, res$predicted_epitope, 
+                                      title = 'Tcrdist3 Confusion matrix. Multi-class classification\n')
+tcrdist3_binary_cm 
+tcrdist3_multiclass_cm
+```
