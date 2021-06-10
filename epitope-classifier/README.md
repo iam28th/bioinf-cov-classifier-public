@@ -72,7 +72,7 @@ This part of the project consists of several scripts and files to be briefly des
 
 In addition, two folders under the names of used algorithms are present in the repo. They contain the input files used for the analysis, the resulting output files and resulting plots and metrics.
 
-Finally, an R Markdown `pipeline.Rmd` containing the brief workflow of the analysis is stored at the same directory as this README. Please explore it if you have any questions on how this repository is organized.
+Finally, an  html file `pipeline.html` and R Markdown `pipeline.Rmd` containing the brief workflow of the analysis are stored at the same directory as this README. Please explore them if you have any questions on how this repository is organized.
 
 ## Data availability
 
